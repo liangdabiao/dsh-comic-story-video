@@ -1,0 +1,52 @@
+{
+  "name": "dsh-comic-story-video",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "漫画故事片场：随包提供「漫画面讲故事」skill（声音是主线的十条硬规则+八格范例），把选题做成 110–135 秒竖屏漫画短视频——线稿逐笔描出、代码叠台词气泡、单口配音、大字幕。Python 逐笔引擎（whiteboard-animator）随包携带，工具层编排：预检（comic_check，只拦机械事故）、出图清单（comic_prompts，指纹台账防重复花钱）、后台制作（comic_produce）、产物校验（comic_verify，抽帧+听音）、环境体检（comic_doctor，可自动补依赖）。侧栏「漫画故事片场」工作台：四步流水线视图 + 分镜档案 + 成片播放。",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "engine",
+    "lab",
+    "lib",
+    "skills",
+    "locale/*.json",
+    "cordis.patch.yml",
+    "icon.svg",
+    "README.md"
+  ],
+  "icon": "./icon.svg",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "comic",
+    "storyboard",
+    "whiteboard",
+    "lineart",
+    "tts",
+    "short-video",
+    "explainer"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    }
+  },
+  "engines": {
+    "dsh": ">=0.2.1-rc.2 <0.3.0"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,5 @@
+# 漫画故事片场：Host 半边。注册 skill（comic-story-video）、六个工具
+# （项目/预检/出图清单/制作/验收/环境体检）和 /comic-story-video 工作台（静态页面 + 数据接口）。
+- insert:
+    - id: comic-story-video
+      name: 'dsh-comic-story-video'
