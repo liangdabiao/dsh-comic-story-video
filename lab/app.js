@@ -31,7 +31,11 @@ const shortTime = (iso) => {
   const p = (n) => String(n).padStart(2, '0')
   return `${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
-const joinPath = (dir, rel) => `${String(dir).replace(/[\\/]+$/, '')}/${String(rel).replace(/^[\\/]+/, '')}`
+// 拼接项目内相对路径：joinPath(dir, 'check', '03.png') → dir/check/03.png
+const joinPath = (dir, ...rel) => [
+  String(dir).replace(/[\\/]+$/, ''),
+  ...rel.map((r) => String(r ?? '').replace(/^[\\/]+/, ''))
+].filter((p) => p !== '').join('/')
 const mediaUrl = (abs) => `${BASE}/media?path=${encodeURIComponent(abs)}`
 const kb = (bytes) => (!bytes ? '' : bytes > 1024 * 1024 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`)
 

@@ -56,6 +56,10 @@ body {
   background: var(--bg);
 }
 
+/* 正文里的链接（平屏版、等）用主题强调色：浏览器默认蓝在深色底上几乎看不见 */
+a { color: var(--accent); text-underline-offset: 2px; }
+a:hover { color: var(--ink); }
+
 /* ---------------- 左栏 ---------------- */
 
 .rail {
