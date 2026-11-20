@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 
 const ROOT = mkdtempSync(join(tmpdir(), 'csv-api-'))
 process.env.DSH_HOME = join(ROOT, 'home')
@@ -122,6 +122,63 @@ await test('POST /api/produce stop：没在跑返回 409', async () => {
 await test('POST /api/roots：删根目录', async () => {
   const r = await req('POST', '/api/roots', { remove: P })
   assert.equal(r.data.roots.includes(P), false)
+})
+
+await test('删掉扫描目录后，台账里的项目还在（历史不丢）', async () => {
+  const cat = await req('GET', '/api/catalog')
+  const norm = (p) => p.replace(/\\/g, '/')
+  assert.ok(cat.data.projects.some((p) => norm(p.path) === norm(DIR)), JSON.stringify(cat.data.projects))
+})
+
+await test('POST /api/project/create：只给主题就建目录并记台账', async () => {
+  const base = join(ROOT, '片场')
+  const r = await req('POST', '/api/project/create', { topic: '为什么有人永远在加班：一个关于排期的故事', base })
+  assert.equal(r.status, 200, JSON.stringify(r.data))
+  assert.ok(existsSync(join(r.data.path, 'story.json')))
+  assert.ok(existsSync(join(r.data.path, 'raw')))
+  assert.ok(r.data.path.startsWith(base), r.data.path)
+  assert.match(r.data.path, /加班/)
+  // 模板里的示例片名/示例分镜不能留在新片上：标题用主题，格子清空
+  const seeded = JSON.parse(readFileSync(join(r.data.path, 'story.json'), 'utf8'))
+  assert.match(seeded.title, /加班/, `title=${seeded.title}`)
+  assert.deepEqual(seeded.scenes, [], '新项目不该带模板的示例分镜')
+  assert.ok(seeded.tts && seeded.tts.speed === 1, '配音参数要保留')
+  // 同名再建一次不覆盖，自动加序号
+  const again = await req('POST', '/api/project/create', { topic: '为什么有人永远在加班：一个关于排期的故事', base })
+  assert.notEqual(again.data.path, r.data.path)
+  assert.ok(existsSync(join(again.data.path, 'story.json')))
+  const cat = await req('GET', '/api/catalog')
+  assert.equal(cat.data.outputRoot.replace(/\\/g, '/'), base.replace(/\\/g, '/'))
+  assert.ok(cat.data.projects.length >= 3, `作品数 ${cat.data.projects.length}`)
+})
+
+await test('片名优先于主题做目录名', async () => {
+  const base = join(ROOT, '片场2')
+  const r = await req('POST', '/api/project/create', { topic: '主题', name: '一个销冠的诞生', base })
+  assert.equal(basename(r.data.path), '一个销冠的诞生')
+})
+
+await test('catalog 带封面与成片；成片列表指向真实文件', async () => {
+  const dir = join(ROOT, 'projects', '舌战群儒')
+  writeFileSync(join(dir, '_contact.png'), 'PNGDATA', 'utf8')
+  mkdirSync(join(dir, 'out'), { recursive: true })
+  writeFileSync(join(dir, 'out', 'final.mp4'), 'MP4DATA', 'utf8')
+  const cat = await req('GET', '/api/catalog')
+  const norm = (p) => p.replace(/\\/g, '/')
+  const entry = cat.data.projects.find((p) => norm(p.path) === norm(dir))
+  assert.ok(entry, '项目应在作品库里')
+  assert.equal(entry.cover, '_contact.png')
+  assert.ok(entry.final && entry.final.abs.endsWith('final.mp4'))
+  assert.equal(entry.final.bytes, 7)
+  assert.equal(cat.data.finals.length, 1)
+  assert.equal(cat.data.finals[0].title, '改过')
+})
+
+await test('POST /api/reveal：项目外的路径拒绝', async () => {
+  const outside = join(ROOT, 'outside.txt')
+  writeFileSync(outside, 'x', 'utf8')
+  const r = await req('POST', '/api/reveal', { path: outside })
+  assert.ok([400, 403].includes(r.status), String(r.status))
 })
 
 await test('GET /media：项目内文件放行、项目外 403', async () => {

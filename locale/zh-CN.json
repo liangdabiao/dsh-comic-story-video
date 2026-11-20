@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "漫画故事片场",
-    "description": "把任意选题做成 110–135 秒竖屏「图片在讲故事」的漫画短视频：生成式线稿逐笔描出、代码叠台词气泡、单口配音+大字幕。随包「漫画面讲故事」skill（声音是主线+十条硬规则+八格范例念白），Python 逐笔引擎（whiteboard-animator）随包携带；comic_check 机械预检（只拦跑不起来的事故，不判文案好坏）、comic_prompts 出图清单（指纹台账防重复花钱）、comic_produce 后台制作（配音→气泡→落版→逐笔渲染→合成竖屏）、comic_verify 产物校验（抽帧+听音）、comic_doctor 环境体检（Python/ffmpeg/apiz，可自动补依赖）。出图默认 apiz flare 图生图（风格锚点参考，约 19 积分/张），配音默认 apiz MiniMax 单口腔。侧栏工作台：四步流水线（故事→出图→制作→验收）+ 分镜档案卡 + 总览图 + 成片播放。"
+    "description": "把任意选题做成 110–135 秒竖屏「图片在讲故事」的漫画短视频：生成式线稿逐笔描出、代码叠台词气泡、单口配音+大字幕。随包「漫画面讲故事」skill（声音是主线+十条硬规则+八格范例念白），Python 逐笔引擎（whiteboard-animator）随包携带；comic_check 机械预检（只拦跑不起来的事故，不判文案好坏）、comic_prompts 出图清单（指纹台账防重复花钱）、comic_produce 后台制作（配音→气泡→落版→逐笔渲染→合成竖屏）、comic_verify 产物校验（抽帧+听音）、comic_doctor 环境体检（Python/ffmpeg/apiz，可自动补依赖）。出图默认 apiz flare 图生图（风格锚点参考，约 19 积分/张），配音默认 apiz MiniMax 单口腔。侧栏工作台：填主题一键开拍（建目录 + 跳对话）、作品库/成片库（封面 + 成片路径 + 打开文件夹/复制路径）、分镜档案卡 + 总览图 + 成片播放。"
   }
 }

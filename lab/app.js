@@ -64,15 +64,53 @@ function toast(msg, bad = false) {
 
 // ---------------------------------------------------------------- 主题 / 宿主通信
 
+let chatTimer = null
+let chatFallback = null
+
 addEventListener('message', (e) => {
   const m = e.data
-  if (!m || m.type !== 'comic-story-video:scheme' || !m.scheme) return
-  document.documentElement.dataset.scheme = m.scheme
+  if (!m) return
+  if (m.type === 'comic-story-video:scheme' && m.scheme) {
+    document.documentElement.dataset.scheme = m.scheme
+    return
+  }
+  if (m.type === 'comic-story-video:start-ok') {
+    clearTimeout(chatTimer)
+    chatTimer = null
+    chatFallback = null
+    toast('已跳到对话：看一眼指令，发送就行')
+    return
+  }
+  if (m.type === 'comic-story-video:start-failed') {
+    clearTimeout(chatTimer)
+    chatTimer = null
+    toast(`打不开对话：${m.message || '宿主没接住'}`, true)
+    if (typeof chatFallback === 'function') chatFallback()
+    chatFallback = null
+  }
 })
 
-// 在对话里继续：把指令填进新对话
-function startInChat(prompt) {
+// 交给宿主开新对话并填好指令；宿主没回执（不在 dsh 里打开）就走兜底回调
+function startInChat(prompt, fallback) {
+  clearTimeout(chatTimer)
+  chatFallback = typeof fallback === 'function' ? fallback : null
+  chatTimer = setTimeout(() => {
+    chatTimer = null
+    const fn = chatFallback
+    chatFallback = null
+    if (fn) fn()
+  }, 2500)
   parent.postMessage({ type: 'comic-story-video:start', prompt }, location.origin)
+}
+
+// 预览浮层：图/视频都能点开看，成片也走它
+function openViewer(src, title, { direct = false } = {}) {
+  const url = direct ? src : mediaUrl(src)
+  viewerTitle.textContent = title || ''
+  viewerBody.innerHTML = /\.mp4(\?|$)/i.test(url)
+    ? `<video controls autoplay src="${url}"></video>`
+    : `<img src="${url}">`
+  viewer.hidden = false
 }
 
 // ---------------------------------------------------------------- 路由
@@ -93,6 +131,40 @@ function stopLogTimer() {
 }
 
 // ---------------------------------------------------------------- 概览
+
+const TOPIC_EXAMPLES = [
+  '舌战群儒',
+  '一个销冠的诞生',
+  'QE 为什么让全世界央行紧张',
+  '为什么古代打仗动不动就几十万大军'
+]
+
+// 交给对话模型的指令：主题 + 已建好的项目目录 + 按 skill 的顺序
+function topicPrompt(topic, dir) {
+  return [
+    '用「漫画面讲故事」skill 做一条漫画短视频。',
+    `选题：${topic}`,
+    `项目目录：${dir}（已建好，story.json 模板和 raw/ 都在）`,
+    '先 comic_doctor 体检环境，再写 story.json：先填 story_line / question / answer 三行头，填不出来先跟我确认选题角度。',
+    '然后 comic_check（script）→ comic_prompts 出图（apiz flare 图生图，风格锚点参考）→ comic_check（image）→ comic_produce 制作 → comic_verify 验收，成片交付 <项目>/out/final.mp4。'
+  ].join('\n')
+}
+
+// 填主题 → 建目录 → 跳对话。建完立刻把项目放进台账，历史里马上能看到。
+async function createProjectAndChat({ topic, name = '', base = '', onCreated }) {
+  const text = String(topic || '').trim()
+  if (!text) throw new Error('先写一句主题：这条片子要讲什么？')
+  const body = { topic: text }
+  if (name.trim()) body.name = name.trim()
+  if (base.trim()) body.base = base.trim()
+  const r = await post('/api/project/create', body)
+  if (typeof onCreated === 'function') onCreated(r)
+  startInChat(topicPrompt(text, r.path), () => {
+    location.hash = `#/project?path=${encodeURIComponent(r.path)}`
+    toast('项目建好了。宿主没回执（可能不是从 dsh 面板里打开的），先看项目页。', true)
+  })
+  return r
+}
 
 async function renderHome() {
   document.querySelectorAll('.nav a').forEach((a) => a.classList.toggle('active', a.dataset.view === 'home'))
@@ -115,40 +187,24 @@ async function renderHome() {
     const hints = (health.notes || []).map((n) => `<div class="hint">${esc(n)}</div>`).join('')
     const fixBtn = health.ok ? '' : '<button class="small" id="btn-fix">自动补依赖</button>'
 
-    const cards = cat.projects.map((p) => `
-      <a class="card proj-card" href="#/project?path=${encodeURIComponent(p.path)}">
-        <div class="t">${esc(p.title || '未填 title')}</div>
-        <div class="sl">${esc(p.storyLine || '（story_line 还没填）')}</div>
-        <div class="meta">
-          <span class="badge s${p.stage}">${STAGE_NAMES[p.stage]}</span>
-          <span>分镜 ${p.scenes}</span>
-          <span>图 ${p.doneArts}/${p.arts}</span>
-          ${p.hasFinal ? '<span style="color:var(--ok)">有成片</span>' : ''}
-        </div>
-        <div class="path">${esc(p.path)} · ${shortTime(p.updatedAt)}</div>
-      </a>`).join('')
-
     app.innerHTML = `
-      <h1>概览</h1>
-      <p class="sub">选题进来，漫画片出去：写故事 → 出图 → 制作 → 验收，四步一条片。</p>
-      <div class="health">${chips.join('')}${fixBtn}${hints}</div>
-      <div class="grid">
-        ${cards}
-        <a class="card new-card" href="#/new"><span><span class="plus">＋</span><br>新建漫画片</span></a>
-      </div>
-      ${cat.roots.length ? rootsHtml(cat) : ''}`
+      <section class="card hero">
+        <h1>说一句主题，剩下交给片场</h1>
+        <p class="sub">填主题 → 点「开始创作」：自动建好项目目录，直接跳到对话，模型按 skill 写故事、出图、制作、验收。</p>
+        <textarea id="hero-topic" rows="2" placeholder="例如：一个人，一张嘴，怎么让一屋子打算投降的人点头？"></textarea>
+        <div class="hero-actions">
+          <button class="primary" id="hero-go">开始创作 →</button>
+          <span class="mini">试试：${TOPIC_EXAMPLES.map((t) => `<button class="chip sm" data-topic="${esc(t)}">${esc(t)}</button>`).join('')}</span>
+        </div>
+      </section>
 
-    const fix = document.getElementById('btn-fix')
-    if (fix) fix.onclick = async () => {
-      fix.disabled = true
-      fix.textContent = '安装中（首次要下 ~83MB 模型）…'
-      try {
-        const res = await fetch(`${BASE}/api/health?fix=1`)
-        const body = await res.json()
-        toast(body.ok && body.python && (body.deps || []).every((d) => d.ok) ? '依赖装好了' : '还没齐：看环境条提示', !body.ok)
-      } catch (err) { toast(String(err.message || err), true) }
-      renderHome()
-    }
+      <div class="health">${chips.join('')}${fixBtn}${hints}</div>
+
+      ${worksSection(cat.projects || [])}
+      ${finalsSection(cat.finals || [])}
+      ${rootsCard(cat)}`
+
+    bindHome(cat)
   } catch (err) {
     state.error = String(err.message || err)
     app.innerHTML = `<div class="card"><b>加载失败</b><p class="sub">${esc(state.error)}</p></div>`
@@ -159,64 +215,218 @@ function chip(ok, label) {
   return `<span class="chip ${ok ? 'ok' : 'bad'}"><span class="dot"></span>${label}</span>`
 }
 
-function rootsHtml(cat) {
+function worksSection(works) {
+  if (!works.length) {
+    return `
+      <h2>作品</h2>
+      <div class="card empty">
+        <b>还没有作品</b>
+        <p class="sub">上面填个主题就能开拍；别处做过的项目用下面的「扫描已有目录」纳进来。</p>
+      </div>`
+  }
+  const cards = works.map((p) => {
+    const href = `#/project?path=${encodeURIComponent(p.path)}`
+    const cover = p.cover
+      ? `<img src="${mediaUrl(joinPath(p.path, p.cover))}" alt="${esc(p.title || p.path)}" loading="lazy">`
+      : '<span class="ph">还没出图</span>'
+    return `
+      <div class="card work">
+        <a class="work-cover" href="${href}">${cover}${p.final ? '<span class="work-flag">成片</span>' : ''}</a>
+        <div class="work-body">
+          <a class="work-title" href="${href}">${esc(p.title || '未填 title')}</a>
+          <div class="work-sub">${esc(p.storyLine || '（story_line 还没填）')}</div>
+          <div class="work-meta">
+            <span class="badge s${p.stage}">${STAGE_NAMES[p.stage]}</span>
+            <span>分镜 ${p.scenes}</span>
+            <span>图 ${p.doneArts}/${p.arts}</span>
+            <span>${shortTime(p.updatedAt)}</span>
+          </div>
+          <div class="work-acts">
+            ${p.final ? `<button class="small primary" data-play="${esc(p.final.abs)}" data-title="${esc(p.title)}">▶ 播放成片</button>` : ''}
+            <a class="small linkbtn" href="${href}">分镜详情</a>
+            <button class="small" data-reveal="${esc(p.final ? p.final.abs : p.path)}">${p.final ? '打开成片位置' : '打开文件夹'}</button>
+          </div>
+          <div class="work-path">${esc(p.path)}</div>
+        </div>
+      </div>`
+  }).join('')
+  return `<h2>作品 <span class="count">${works.length}</span></h2><div class="works">${cards}</div>`
+}
+
+function finalsSection(finals) {
+  if (!finals.length) return ''
+  const rows = finals.map((f) => `
+    <div class="final-row">
+      <div class="fr-main">
+        <div class="fr-title">${esc(f.title)}</div>
+        <div class="fr-path">${esc(f.abs)}</div>
+      </div>
+      <div class="fr-meta">${kb(f.bytes)} · ${shortTime(f.at)}</div>
+      <div class="fr-acts">
+        <button class="small primary" data-play="${esc(f.abs)}" data-title="${esc(f.title)}">▶ 播放</button>
+        <button class="small" data-reveal="${esc(f.abs)}">打开文件夹</button>
+        <button class="small" data-copy="${esc(f.abs)}">复制路径</button>
+      </div>
+    </div>`).join('')
+  return `<h2>成片 <span class="count">${finals.length}</span></h2><div class="card finals">${rows}</div>`
+}
+
+function rootsCard(cat) {
   return `
-    <h2>扫描目录</h2>
-    <div class="roots">
-      ${cat.roots.map((r) => `
-        <div class="root-row"><span class="p">${esc(r)}</span><button class="small" data-remove="${esc(r)}">移除</button></div>`).join('')}
+    <h2>扫描已有目录</h2>
+    <div class="card">
+      <p class="sub" style="margin:0 0 8px">别处做过的项目（含 story.json 的目录）用这里纳进来，会出现在上面的作品里。</p>
+      <div class="row">
+        <input id="root-input" placeholder="例如 D:\\stories">
+        <button class="small" id="root-add">添加</button>
+      </div>
+      ${cat.roots.length ? `<div class="roots">
+        ${cat.roots.map((r) => `<div class="root-row"><span class="p">${esc(r)}</span><button class="small" data-remove="${esc(r)}">移除</button></div>`).join('')}
+      </div>` : ''}
     </div>`
+}
+
+function bindHome(cat) {
+  const fix = document.getElementById('btn-fix')
+  if (fix) fix.onclick = async () => {
+    fix.disabled = true
+    fix.textContent = '安装中（首次要下 ~83MB 模型）…'
+    try {
+      const res = await fetch(`${BASE}/api/health?fix=1`)
+      const body = await res.json()
+      toast(body.ok && body.python && (body.deps || []).every((d) => d.ok) ? '依赖装好了' : '还没齐：看环境条提示', !body.ok)
+    } catch (err) { toast(String(err.message || err), true) }
+    renderHome()
+  }
+
+  const topic = document.getElementById('hero-topic')
+  const go = document.getElementById('hero-go')
+  document.querySelectorAll('[data-topic]').forEach((b) => {
+    b.onclick = () => { topic.value = b.dataset.topic; topic.focus() }
+  })
+  if (topic && go) {
+    topic.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) go.click()
+    })
+    go.onclick = async () => {
+      go.disabled = true
+      go.textContent = '建项目…'
+      try {
+        await createProjectAndChat({ topic: topic.value, onCreated: (r) => { if (r.base) cat.outputRoot = r.base } })
+      } catch (err) {
+        toast(String(err.message || err), true)
+      } finally {
+        go.disabled = false
+        go.textContent = '开始创作 →'
+      }
+    }
+  }
+
+  bindMediaActions()
+
+  const add = document.getElementById('root-add')
+  const input = document.getElementById('root-input')
+  if (add && input) add.onclick = async () => {
+    const p = input.value.trim()
+    if (!p) return toast('填一个绝对路径', true)
+    try {
+      await post('/api/roots', { add: p })
+      toast('已加入扫描目录')
+      renderHome()
+    } catch (err) { toast(String(err.message || err), true) }
+  }
+  document.querySelectorAll('[data-remove]').forEach((b) => {
+    b.onclick = async () => {
+      try {
+        await post('/api/roots', { remove: b.dataset.remove })
+        renderHome()
+      } catch (err) { toast(String(err.message || err), true) }
+    }
+  })
+}
+
+// 播放 / 打开文件夹 / 复制路径：概览、成片库、项目页共用
+function bindMediaActions() {
+  document.querySelectorAll('[data-play]').forEach((b) => {
+    b.onclick = (e) => {
+      e.preventDefault()
+      openViewer(b.dataset.play, b.dataset.title || '成片')
+    }
+  })
+  document.querySelectorAll('[data-reveal]').forEach((b) => {
+    b.onclick = async (e) => {
+      e.preventDefault()
+      try {
+        await post('/api/reveal', { path: b.dataset.reveal })
+      } catch (err) { toast(String(err.message || err), true) }
+    }
+  })
+  document.querySelectorAll('[data-copy]').forEach((b) => {
+    b.onclick = async (e) => {
+      e.preventDefault()
+      const text = b.dataset.copy
+      try {
+        await navigator.clipboard.writeText(text)
+        toast('路径已复制')
+      } catch {
+        toast(text, false)
+      }
+    }
+  })
 }
 
 // ---------------------------------------------------------------- 新建
 
-function renderNew() {
+async function renderNew() {
   document.querySelectorAll('.nav a').forEach((a) => a.classList.toggle('active', a.dataset.view === 'new'))
-  const lastRoot = (state.catalog && state.catalog.lastRoot) || ''
-  const defaultDir = lastRoot ? lastRoot.replace(/[\\/]+$/, '') : ''
-  const suggestions = ['舌战群儒', '一个销冠的诞生', ' QE 是什么']
+  if (!state.catalog) state.catalog = await api('/api/catalog').catch(() => null)
+  const cat = state.catalog || {}
+  const outputRoot = cat.outputRoot || ''
   app.innerHTML = `
     <h1>新建漫画片</h1>
-    <p class="sub">建项目目录 + story.json 模板。故事内容（三行头/念白/气泡/prompt）由对话里的模型按随包 skill 写。</p>
+    <p class="sub">只填主题：片场建好项目目录，然后直接跳到对话。故事内容由模型按随包 skill 写。</p>
     <div class="card form">
-      <label>项目目录（绝对路径）</label>
-      <input id="f-path" placeholder="例如 D:\\stories\\shezhan" value="${esc(defaultDir)}">
-      <div class="suggest">常用：${suggestions.map((s) => `<button class="small" data-suggest="${esc(s.trim())}">${esc(s.trim())}</button>`).join('')}</div>
-      <div class="note">
-        建好后：<br>
-        1. 点「建项目」——目录里会出现 story.json 模板和 raw/<br>
-        2. 点「在对话里继续」——把片名带给模型，模型按 skill 写故事、预检、出图、制作、验收
-      </div>
+      <label>主题（这条片子要讲什么）</label>
+      <textarea id="f-topic" rows="3" placeholder="例如：一个人，一张嘴，怎么让一屋子打算投降的人点头？"></textarea>
+      <div class="suggest">试试：${TOPIC_EXAMPLES.map((t) => `<button class="small" data-topic="${esc(t)}">${esc(t)}</button>`).join('')}</div>
+
+      <label>片名（可选，决定目录名与作品标题）</label>
+      <input id="f-name" placeholder="不填就用主题当目录名">
+
+      <details class="adv">
+        <summary>保存位置（默认作品目录）</summary>
+        <input id="f-base" value="${esc(outputRoot)}" placeholder="例如 D:\\漫画故事">
+      </details>
+
       <div class="actions">
-        <button class="primary" id="btn-create">建项目</button>
-        <button id="btn-chat" disabled>在对话里继续</button>
+        <button class="primary" id="btn-create">开始创作 →</button>
+        <span class="mini" id="f-tip">建目录 + 跳对话，一步完成</span>
       </div>
     </div>`
 
-  const pathInput = document.getElementById('f-path')
-  const chatBtn = document.getElementById('btn-chat')
-  let created = ''
+  const topic = document.getElementById('f-topic')
+  const name = document.getElementById('f-name')
+  const base = document.getElementById('f-base')
+  const go = document.getElementById('btn-create')
+  const tip = document.getElementById('f-tip')
 
-  document.querySelectorAll('[data-suggest]').forEach((b) => {
-    b.onclick = () => {
-      pathInput.value = pathInput.value.replace(/[\\/]+$/, '') + '/' + b.dataset.suggest
-    }
+  document.querySelectorAll('[data-topic]').forEach((b) => {
+    b.onclick = () => { topic.value = b.dataset.topic; topic.focus() }
   })
 
-  document.getElementById('btn-create').onclick = async () => {
-    const p = pathInput.value.trim()
-    if (!p) return toast('先填项目目录', true)
+  go.onclick = async () => {
+    go.disabled = true
+    go.textContent = '建项目…'
+    tip.textContent = '正在建目录并打开对话…'
     try {
-      const r = await post('/api/project/init', { path: p })
-      created = r.path
-      chatBtn.disabled = false
-      toast(r.fresh ? '项目建好了' : '目录已存在，story.json 保留原样')
-    } catch (err) { toast(String(err.message || err), true) }
-  }
-
-  chatBtn.onclick = () => {
-    if (!created) return
-    startInChat(`用「漫画面讲故事」 skill 做一条漫画短视频。项目目录：${created}。选题：请在项目里看一下（或我现在告诉你）。先 comic_doctor 体检环境，然后按五步走：写 story.json（先填三行头）→ comic_check → comic_prompts 出图 → comic_produce 制作 → comic_verify 验收。`)
+      const r = await createProjectAndChat({ topic: topic.value, name: name.value, base: base.value })
+      tip.textContent = `已建好：${r.path}`
+    } catch (err) {
+      tip.textContent = ''
+      toast(String(err.message || err), true)
+      go.disabled = false
+      go.textContent = '开始创作 →'
+    }
   }
 }
 
@@ -296,6 +506,12 @@ async function renderProject(path) {
         <div>
           <b>${esc(d.artifacts.final)}</b>
           <p class="sub">1080×1920 竖屏成片。验收：闭眼只听音轨能说出「谁想要什么、发生了哪几件事、最后怎么收」；抽帧看画面在动、底色对、字幕不出画。</p>
+          <div class="final-acts">
+            <button class="small primary" data-play="${esc(finalPath)}" data-title="${esc(s.title)}">▶ 播放成片</button>
+            <button class="small" data-reveal="${esc(finalPath)}">打开文件夹</button>
+            <button class="small" data-copy="${esc(finalPath)}">复制路径</button>
+          </div>
+          <p class="pathabs">${esc(finalPath)}</p>
           ${(d.artifacts.checkFrames || []).length ? `<div class="frames">${d.artifacts.checkFrames.map((f) => `<img src="${mediaUrl(joinPath(path, 'check', f.name))}" data-full="${mediaUrl(joinPath(path, 'check', f.name))}" alt="${esc(f.name)}">`).join('')}</div>` : ''}
           ${d.artifacts.flat ? `<p class="sub" style="margin-top:10px">平屏版：<a href="${mediaUrl(joinPath(path, d.artifacts.flat))}" target="_blank">story_flat.mp4</a></p>` : ''}
         </div>
@@ -319,6 +535,8 @@ async function renderProject(path) {
     <div class="topbar">
       <a class="back" href="#/">← 概览</a>
       <span class="grow"></span>
+      <button class="small" id="btn-reveal">打开文件夹</button>
+      <button class="small" id="btn-copy">复制路径</button>
       <button class="small" id="btn-chat">在对话里继续</button>
     </div>
     <h1>${esc(s.title || '未填 title')}</h1>
@@ -340,18 +558,22 @@ async function renderProject(path) {
 }
 
 function bindProjectEvents(path, running) {
-  const openViewer = (src, title) => {
-    viewerTitle.textContent = title || ''
-    viewerBody.innerHTML = src.endsWith('.mp4') || src.includes('.mp4')
-      ? `<video controls autoplay src="${src}"></video>`
-      : `<img src="${src}">`
-    viewer.hidden = false
-  }
   document.querySelectorAll('[data-full]').forEach((el) => {
-    el.onclick = () => openViewer(el.dataset.full, el.alt)
+    el.onclick = () => openViewer(el.dataset.full, el.alt, { direct: true })
   })
+  bindMediaActions()
+
+  const reveal = document.getElementById('btn-reveal')
+  if (reveal) reveal.onclick = async () => {
+    try { await post('/api/reveal', { path }) } catch (err) { toast(String(err.message || err), true) }
+  }
+  const copy = document.getElementById('btn-copy')
+  if (copy) copy.onclick = async () => {
+    try { await navigator.clipboard.writeText(path); toast('路径已复制') } catch { toast(path) }
+  }
+
   const chat = document.getElementById('btn-chat')
-  if (chat) chat.onclick = () => startInChat(`继续做漫画片「${(state.project && state.project.summary.title) || ''}」（目录 ${path}）。用 comic_project action=read 看当前进度，接着四步流水线下一步走。`)
+  if (chat) chat.onclick = () => startInChat(`继续做漫画片「${(state.project && state.project.summary.title) || ''}」（目录 ${path}）。用 comic_project action=read 看当前进度，接着四步流水线下一步走。`, () => toast('宿主没回执：可能不是从 dsh 面板里打开的', true))
   const produce = document.getElementById('btn-produce')
   if (produce) produce.onclick = async () => {
     produce.disabled = true

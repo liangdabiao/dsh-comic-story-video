@@ -305,6 +305,90 @@ details.report .logbox { margin-top: 8px; max-height: 320px; }
 .root-row .p { word-break: break-all; }
 .root-row button { margin-left: auto; }
 
+/* ---------------- 主题开拍 / 作品库 / 成片库 ---------------- */
+
+.row { display: flex; gap: 10px; align-items: center; }
+.row > input { flex: 1 1 auto; min-width: 0; width: auto; }
+.row > button { flex: none; white-space: nowrap; }
+textarea {
+  font: inherit;
+  padding: 9px 11px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-2);
+  color: var(--ink);
+  resize: vertical;
+}
+textarea:focus { outline: none; border-color: var(--accent); }
+
+.hero { padding: 20px 22px; margin-bottom: 16px; }
+.hero h1 { margin: 0 0 4px; font-size: 20px; }
+.hero .sub { margin: 0 0 12px; }
+.hero-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.mini { font-size: 12px; color: var(--ink-3); display: inline-flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.chip.sm { border-radius: 999px; padding: 3px 10px; font-size: 11.5px; background: var(--bg-2); cursor: pointer; }
+.chip.sm:hover { border-color: var(--accent); color: var(--accent); }
+.count {
+  font-size: 11.5px; font-weight: 600; color: var(--ink-3);
+  background: var(--line-2); border-radius: 999px; padding: 1px 8px; margin-left: 4px;
+}
+
+.works { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.work { display: flex; gap: 14px; padding: 12px; align-items: flex-start; }
+.work-cover {
+  flex: none; width: 108px; height: 120px;
+  border-radius: 9px; overflow: hidden; position: relative;
+  background: var(--paper-soft); border: 1px solid var(--line-2);
+  display: grid; place-items: center;
+}
+.work-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.work-cover .ph { font-size: 11px; color: var(--ink-3); text-align: center; }
+.work-flag {
+  position: absolute; left: 4px; top: 4px;
+  font-size: 10px; font-weight: 600; color: #fff;
+  background: var(--ok); border-radius: 999px; padding: 1px 7px;
+}
+.work-body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 5px; }
+.work-title { font-weight: 700; font-size: 14.5px; color: var(--ink); text-decoration: none; }
+.work-title:hover { color: var(--accent); }
+.work-sub {
+  font-size: 12px; color: var(--ink-2);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.work-meta { display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; color: var(--ink-3); align-items: center; }
+.work-acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+.work-path { font-size: 10.5px; color: var(--ink-3); word-break: break-all; }
+a.linkbtn {
+  display: inline-flex; align-items: center;
+  border: 1px solid var(--line); border-radius: 6px;
+  padding: 3px 10px; font-size: 12.5px; text-decoration: none; color: var(--ink);
+}
+a.linkbtn:hover { border-color: var(--ink-3); color: var(--ink); }
+
+.finals { display: flex; flex-direction: column; padding: 6px 10px; }
+.final-row {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 6px; border-bottom: 1px solid var(--line-2);
+}
+.final-row:last-child { border-bottom: none; }
+.fr-main { min-width: 0; flex: 1 1 300px; }
+.fr-title { font-weight: 600; font-size: 13px; }
+.fr-path { font-size: 11px; color: var(--ink-3); word-break: break-all; }
+.fr-meta { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; }
+.fr-acts { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.empty { text-align: center; padding: 26px 18px; }
+.empty b { font-size: 14px; }
+.empty .sub { margin: 6px 0 0; }
+
+.final-acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.pathabs { font-size: 11px; color: var(--ink-3); word-break: break-all; margin: 8px 0 0; }
+
+details.adv { margin-top: 12px; }
+details.adv summary { cursor: pointer; font-size: 12.5px; color: var(--ink-2); }
+details.adv input { margin-top: 8px; }
+
 /* ---------------- 指南 ---------------- */
 
 .guide-steps { display: flex; flex-direction: column; gap: 12px; max-width: 760px; }
@@ -336,8 +420,13 @@ details.report .logbox { margin-top: 8px; max-height: 320px; }
 .viewer-bar { display: flex; align-items: center; gap: 10px; padding: 10px 16px; color: #fff; }
 .viewer-bar .title { font-size: 13px; opacity: 0.9; word-break: break-all; }
 .viewer-bar button { background: rgba(255, 255, 255, 0.14); border-color: transparent; color: #fff; }
-.viewer-body { flex: 1; display: grid; place-items: center; padding: 0 24px 24px; overflow: auto; }
-.viewer-body img, .viewer-body video { max-width: 100%; max-height: 100%; border-radius: 8px; }
+.viewer-body { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 0 24px 24px; overflow: auto; }
+.viewer-body img, .viewer-body video {
+  max-width: 100%;
+  max-height: calc(100vh - 82px);
+  border-radius: 8px;
+  object-fit: contain;
+}
 
 .toast {
   position: fixed; left: 50%; bottom: 26px;

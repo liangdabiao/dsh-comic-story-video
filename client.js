@@ -64,11 +64,18 @@ window.__ModuleLoader__.load({
               if (!frame || e.source !== frame.contentWindow || e.origin !== location.origin) return
               const m = e.data
               if (!m || m.type !== 'comic-story-video:start' || typeof m.prompt !== 'string') return
-              try {
-                ctx.uiWorkspace.startSession(undefined, { prompt: m.prompt, whenDraftExists: 'replace' })
-              } catch (err) {
+              const ok = () => post(frame, { type: 'comic-story-video:start-ok' })
+              const fail = (err) => {
                 console.error('[comic-story-video] 开新对话失败', err)
                 post(frame, { type: 'comic-story-video:start-failed', message: String((err && err.message) || err) })
+              }
+              try {
+                // 多数宿主版本同步返回 undefined；返回 Promise 的版本要等它落地再回执
+                const started = ctx.uiWorkspace.startSession(undefined, { prompt: m.prompt, whenDraftExists: 'replace' })
+                if (started && typeof started.then === 'function') started.then(ok, fail)
+                else ok()
+              } catch (err) {
+                fail(err)
               }
             }
             addEventListener('message', onMessage)

@@ -12,7 +12,7 @@ process.env.DSH_HOME = mkdtempSync(join(tmpdir(), 'csv-test-'))
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
 
-const { artSrc, listProjects, projectDetail, projectSummary, ProjectError, readStory, resolveDir } = await import('../lib/project.js')
+const { artSrc, collectProjects, libraryEntry, listProjects, projectDetail, projectSummary, ProjectError, readStory, resolveDir } = await import('../lib/project.js')
 const { rememberProject, readSettings, writeSettings } = await import('../lib/store.js')
 const { readProduceLog, produceState, pidAlive, stopProduce, verifyProject } = await import('../lib/engine.js')
 const { TOOLS } = await import('../lib/tools.js')
@@ -151,14 +151,35 @@ await test('projectDetail：没有 story.json 报 ProjectError', () => {
 
 // ---------------------------------------------------------------- store
 
-await test('store：roots 增删 + rememberProject 去重', () => {
-  writeSettings({ roots: [] })
+await test('store：rememberProject 记进作品台账并去重', () => {
+  writeSettings({ roots: [], projects: [] })
   const dir = makeProject('remembered')
   rememberProject(dir)
   rememberProject(dir) // 再记一次不重复
   const s = readSettings()
-  assert.equal(s.roots.filter((r) => r.replace(/[\\/]+$/, '').endsWith('remembered')).length, 1)
+  assert.equal(s.projects.filter((r) => r.replace(/[\\/]+$/, '').endsWith('remembered')).length, 1)
+  assert.equal(s.roots.length, 0, '项目不该再被塞进扫描目录')
   assert.equal(s.lastRoot.replace(/[\\/]+$/, '').endsWith('remembered'), true)
+})
+
+await test('libraryEntry：封面与成片都认得出', () => {
+  const dir = makeProject('library')
+  assert.equal(libraryEntry(dir).cover, null)
+  writeFileSync(join(dir, '_contact.png'), 'PNG')
+  mkdirSync(join(dir, 'out'), { recursive: true })
+  writeFileSync(join(dir, 'out', 'final.mp4'), 'MP4')
+  const e = libraryEntry(dir)
+  assert.equal(e.cover, '_contact.png')
+  assert.ok(e.final && e.final.rel === 'out/final.mp4' && e.final.bytes === 3)
+  assert.equal(e.hasFinal, true)
+})
+
+await test('collectProjects：台账里的项目不配扫描目录也列出来', () => {
+  writeSettings({ roots: [], projects: [] })
+  const dir = makeProject('台账项目')
+  rememberProject(dir)
+  const list = collectProjects()
+  assert.ok(list.some((p) => p.path.replace(/\\/g, '/').endsWith('台账项目')), JSON.stringify(list.map((p) => p.path)))
 })
 
 // ---------------------------------------------------------------- engine（不依赖 Python 的部分）
